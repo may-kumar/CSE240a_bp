@@ -71,5 +71,8 @@ void train_predictor(uint32_t pc, uint32_t target, uint32_t outcome, uint32_t co
 // 
 
 
+#define DEC_CNTR(x) (x > SN) ? x-1 : SN
+#define INC_CNTR(x) (x < ST) ? x+1 : ST
+
 
 #endif
