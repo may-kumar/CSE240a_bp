@@ -128,7 +128,6 @@ void cleanup_gshare()
 
 // t = table
 // r = register
-
 #define tourney_lhistoryBits 10    // Number of bits used for Local Pattern History
 #define tourney_lbhthistoryBits 16 // Number of bits used for Local BHT
 #define tourney_ghistoryBits 16    // Number of bits used for Global History
@@ -192,49 +191,40 @@ uint8_t tourney_predict_local(uint32_t pc)
 uint8_t tourney_predict(uint32_t pc)
 {
     uint16_t choice_index = tourney_global_hr & ((1 << tourney_ghistoryBits) - 1);
-    return tourney_choice_pred[choice_index] >= WT ? tourney_predict_global(pc) : tourney_predict_local(pc);
+    return (tourney_choice_pred[choice_index] >= WT) ? tourney_predict_global(pc) : tourney_predict_local(pc);
 }
+
+
 
 void train_tourney(uint32_t pc, uint8_t outcome)
 {
-    uint8_t local_pred = tourney_predict_local(pc);
-    uint8_t global_pred = tourney_predict_global(pc);
+  uint8_t local_pred  = tourney_predict_local(pc);
+  uint8_t global_pred = tourney_predict_global(pc);
 
-    uint32_t choice_entries = 1 << tourney_choiceBits;
-    uint32_t choice_index = (tourney_global_hr ^ pc) & (choice_entries - 1);
+  
+  uint16_t pht_index = pc & ((1 << tourney_lhistoryBits) - 1);
+  uint16_t local_index = tourney_local_ht[pht_index];
+  tourney_local_pred[local_index] = (outcome == TAKEN) ? INC_CNTR(tourney_local_pred[local_index]) : DEC_CNTR(tourney_local_pred[local_index]);
 
-    if ((local_pred == outcome) && (global_pred != outcome))
-    {
-        tourney_choice_pred[choice_index] = DEC_CNTR(tourney_choice_pred[choice_index]);
-    }
-    else if ((global_pred == outcome) && (local_pred != outcome))
-    {
-        tourney_choice_pred[choice_index] = INC_CNTR(tourney_choice_pred[choice_index]);
-    }
+  
+  uint16_t global_index = tourney_global_hr & ((1 << tourney_ghistoryBits) - 1);
+  tourney_global_pred[global_index] = (outcome == TAKEN) ? INC_CNTR(tourney_global_pred[global_index]) : DEC_CNTR(tourney_global_pred[global_index]);
 
-    uint32_t global_bht_entries = 1 << tourney_ghistoryBits;
-    uint32_t global_index = tourney_global_hr & (global_bht_entries - 1);
 
-    uint32_t local_bht_entries = 1 << tourney_lhistoryBits;
-    uint32_t local_pbht_entries = 1 << tourney_lbhthistoryBits;
-    uint32_t pht_index = pc & (local_bht_entries - 1);
-    uint32_t local_index = tourney_local_ht[pht_index];
+  uint16_t choice_index = tourney_global_hr & ((1 << tourney_ghistoryBits) - 1);
+  if (global_pred == outcome && local_pred != outcome)
+  {
+    tourney_choice_pred[choice_index] = INC_CNTR(tourney_choice_pred[choice_index]);
+  }
+  else if (global_pred != outcome && local_pred == outcome)
+  {
+    tourney_choice_pred[choice_index] = DEC_CNTR(tourney_choice_pred[choice_index]);
+  }
 
-    if (outcome == TAKEN)
-    {
-        tourney_global_pred[global_index] = INC_CNTR(tourney_global_pred[global_index]);
-        tourney_local_pred[local_index] = INC_CNTR(tourney_local_pred[local_index]);
-    }
-    else
-    {
-        tourney_global_pred[global_index] = DEC_CNTR(tourney_global_pred[global_index]);
-        tourney_local_pred[local_index] = DEC_CNTR(tourney_local_pred[local_index]);
-    }
+  tourney_global_hr = (tourney_global_hr << 1) | outcome;
+  tourney_local_ht[pht_index] = (tourney_local_ht[pht_index] << 1) | outcome;
 
-    tourney_global_hr = ((tourney_global_hr << 1) | outcome);
-    tourney_local_ht[pht_index] = ((tourney_local_ht[pht_index] << 1) | outcome);
 }
-
 
 void init_predictor()
 {
