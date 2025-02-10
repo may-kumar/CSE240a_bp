@@ -236,8 +236,8 @@ void train_tourney(uint32_t pc, uint8_t outcome) {
 // r = register
 #define custom_lhistoryBits 10    // Number of bits used for Local Pattern History
 #define custom_lbhthistoryBits 16 // Number of bits used for Local BHT
-#define custom_ghistoryBits 16    // Number of bits used for Global History
-#define custom_choiceBits 16      // Number of bits used for Choice Table
+#define custom_ghistoryBits 12    // Number of bits used for Global History
+#define custom_choiceBits 12      // Number of bits used for Choice Table
 
 uint64_t custom_global_hr;
 
@@ -291,6 +291,7 @@ uint8_t custom_predict_local(uint32_t pc)
 {
     uint16_t pht_index = pc & ((1 << custom_lhistoryBits) - 1);
     uint16_t local_index = custom_local_ht[pht_index];
+    // printf("%0X\n", local_index);
     return (custom_local_pred[local_index] >= WT) ? TAKEN : NOTTAKEN;
 }
 
