@@ -129,11 +129,12 @@ bool isCustom = false;
 
 #define tourney_lhistoryBits 12 // Number of bits used for Local History
 #define tourney_ghistoryBits 16 // Number of bits used for Global History
-#define tourney_choiceBits 16   // Number of bits used for Choice Table
+#define tourney_choiceBits 15   // Number of bits used for Choice Table
 
 uint64_t tourney_global_hr;
 
 uint32_t tourney_local_ht[1 << tourney_lhistoryBits];
+
 
 uint8_t tourney_local_pred[1 << tourney_lhistoryBits];
 uint8_t tourney_global_pred[1 << tourney_ghistoryBits];
