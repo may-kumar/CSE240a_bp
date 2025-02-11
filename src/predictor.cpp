@@ -139,8 +139,84 @@ uint32_t tourney_local_ht[1 << tourney_lhistoryBits];
 uint8_t tourney_local_pred[1 << tourney_lhistoryBits];
 uint8_t tourney_global_pred[1 << tourney_ghistoryBits];
 uint8_t tourney_choice_pred[1 << tourney_choiceBits];
+
+
 // Tourney Predictor :
 //  tourament functions
+
+#define LTB_ENTRIES 256  // Loop Termination Buffer entries
+#define MAX_LOOP_COUNT 1024
+#define CONF_THRESH 6    // Confidence threshold for stable prediction
+
+typedef struct {
+    uint32_t tag;           // Partial PC signature
+    uint16_t max_count;     // Predicted loop trip count
+    uint16_t current_count; // Current iteration count
+    uint8_t confidence;     // Confidence counter (0-7)
+    uint8_t valid;          // Valid entry flag
+    uint8_t age;            // For LRU replacement
+} LTB_Entry;
+
+LTB_Entry *ltb;
+
+// Initialize Loop Termination Buffer
+void init_loop_predictor() {
+    ltb = (LTB_Entry *)calloc(LTB_ENTRIES, sizeof(LTB_Entry));
+}
+
+// Loop prediction logic
+uint8_t loop_predict(uint32_t pc) {
+
+    uint32_t index = pc % LTB_ENTRIES;
+    LTB_Entry *entry = &ltb[index];
+    
+    // Tag match check
+    if (entry->valid && entry->tag == (pc & 0xFFFF)) {
+        if (entry->confidence >= CONF_THRESH) {
+            return (entry->current_count < entry->max_count) ? TAKEN : NOTTAKEN;
+        }
+    }
+    
+    // Default prediction for undetected loops
+    return 0xFF;
+}
+
+// Train loop predictor
+void train_loop_predictor(uint32_t pc, uint8_t outcome) {
+
+    uint32_t index = pc % LTB_ENTRIES;
+    LTB_Entry *entry = &ltb[index];
+    
+    // Detect new loops or update existing entries
+    if (entry->valid && entry->tag == (pc & 0xFFFF)) {
+        if (outcome == TAKEN) {
+            entry->current_count++;
+        } else {
+            // Loop exit - update confidence and max_count
+            if (entry->current_count == entry->max_count) {
+                entry->confidence = (entry->confidence < 7) ? entry->confidence + 1 : 7;
+            } else {
+                entry->max_count = entry->current_count;
+                entry->confidence = 0;
+            }
+            entry->current_count = 0;
+        }
+    } else {
+        // Allocate new entry on first loop iteration
+        if (outcome == TAKEN) {
+            entry->tag = pc & 0xFFFF;
+            entry->valid = 1;
+            entry->current_count = 1;
+            entry->max_count = MAX_LOOP_COUNT;
+            entry->confidence = 0;
+            entry->age = 0;
+        }
+    }
+
+}
+
+
+
 void init_tourney()
 {
     int local_bht_entries = 1 << tourney_lhistoryBits;
@@ -171,6 +247,9 @@ void init_tourney()
         }
     }
     tourney_global_hr = 0;
+
+    if (isCustom)
+        init_loop_predictor();
 }
 
 uint8_t tourney_predict_global(uint32_t pc)
@@ -204,6 +283,8 @@ uint8_t tourney_predict(uint32_t pc)
     uint32_t index = tourney_global_hr & (choice_entries - 1);
 
     if (isCustom) {
+        uint8_t loop_pred = loop_predict(pc);
+        if (loop_pred != 0xFF) return loop_pred;
         if (tourney_choice_pred[index] >= WT3)
             return local_pred;
         else
@@ -265,9 +346,13 @@ void train_tourney(uint32_t pc, uint8_t outcome)
         tourney_local_pred[local_index] = DEC_CNTR(tourney_local_pred[local_index]);
     }
 
+    if (isCustom)
+        train_loop_predictor(pc, outcome);
+    
     tourney_global_hr = ((tourney_global_hr << 1) | outcome);
     tourney_local_ht[pht_index] = ((tourney_local_ht[pht_index] << 1) | outcome);
 }
+
 
 // FOR THE CUSTOM PREDICTOR
 #define BIMODAL_SIZE 8192       // 8K entries
