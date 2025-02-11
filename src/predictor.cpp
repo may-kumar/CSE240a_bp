@@ -124,6 +124,9 @@ void cleanup_gshare()
 
 // t = table
 // r = register
+bool isCustom = false;
+
+
 #define tourney_lhistoryBits 12 // Number of bits used for Local History
 #define tourney_ghistoryBits 16 // Number of bits used for Global History
 #define tourney_choiceBits 16   // Number of bits used for Choice Table
@@ -168,7 +171,12 @@ void init_tourney()
 uint8_t tourney_predict_global(uint32_t pc)
 {
     uint32_t global_bht_entries = 1 << tourney_ghistoryBits;
-    uint32_t index = (pc ^ tourney_global_hr) & (global_bht_entries - 1);
+    uint32_t index = 0;
+    if (isCustom){
+        index = (pc ^ tourney_global_hr) & (global_bht_entries - 1);
+    } else {
+        index = tourney_global_hr & (global_bht_entries - 1);
+    }
 
     return (tourney_global_pred[index] >= WT) ? TAKEN : NOTTAKEN;
 }
@@ -214,8 +222,14 @@ void train_tourney(uint32_t pc, uint8_t outcome)
     }
 
     uint32_t global_bht_entries = 1 << tourney_ghistoryBits;
-    uint32_t global_index = (pc ^ tourney_global_hr) & (global_bht_entries - 1);
+    uint32_t global_index = 0;
 
+    if (isCustom){
+        global_index = (pc ^ tourney_global_hr) & (global_bht_entries - 1);
+    } else {
+        global_index = tourney_global_hr & (global_bht_entries - 1);
+    }
+    
     uint32_t local_bht_entries = 1 << tourney_lhistoryBits;
     uint32_t pht_index = pc & (local_bht_entries - 1);
     uint32_t local_index = tourney_local_ht[pht_index] & (local_bht_entries - 1);
@@ -556,7 +570,8 @@ void init_predictor()
         init_tourney();
         break;
     case CUSTOM:
-        init_custom();
+        isCustom = true;
+        init_tourney();
         break;
     default:
         break;
@@ -580,7 +595,7 @@ uint32_t make_prediction(uint32_t pc, uint32_t target, uint32_t direct)
     case TOURNAMENT:
         return tourney_predict(pc);
     case CUSTOM:
-        return custom_predict(pc);
+        return tourney_predict(pc);
     default:
         break;
     }
@@ -607,7 +622,7 @@ void train_predictor(uint32_t pc, uint32_t target, uint32_t outcome, uint32_t co
         case TOURNAMENT:
             return train_tourney(pc, outcome);
         case CUSTOM:
-            return train_custom(pc, outcome);
+            return train_tourney(pc, outcome);
         default:
             break;
         }

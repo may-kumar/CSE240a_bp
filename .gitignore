@@ -1,3 +1,4 @@
 src/main.o
 src/predictor.o
 src/predictor
+.vscode/settings.json
