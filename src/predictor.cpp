@@ -145,9 +145,9 @@ uint32_t branch_count = 0;
 // Tourney Predictor :
 //  tourament functions
 
-#define LTB_ENTRIES 64  // Loop Termination Buffer entries
+#define LTB_ENTRIES 128  // Loop Termination Buffer entries
 #define MAX_LOOP_COUNT 1024
-#define CONF_THRESH 4    // Confidence threshold for stable prediction
+#define CONF_THRESH 6    // Confidence threshold for stable prediction
 
 typedef struct {
     uint32_t tag;           // Partial PC signature
@@ -171,7 +171,7 @@ uint8_t loop_predict(uint32_t pc) {
     LTB_Entry *entry = &ltb[index];
     
     // Tag match check
-    if (entry->valid && entry->tag == (pc & 0xFFF)) {
+    if (entry->valid && entry->tag == ((pc ^ (pc >> 16)) & 0xFFF)) {
         if (entry->confidence >= CONF_THRESH) {
             return (entry->current_count < entry->max_count) ? TAKEN : NOTTAKEN;
         }
@@ -188,7 +188,7 @@ void train_loop_predictor(uint32_t pc, uint8_t outcome) {
     LTB_Entry *entry = &ltb[index];
     
     // Detect new loops or update existing entries
-    if (entry->valid && entry->tag == (pc & 0xFFF)) {
+    if (entry->valid && entry->tag == ((pc ^ (pc >> 16)) & 0xFFF)) {
         if (outcome == TAKEN) {
             entry->current_count++;
         } else {
@@ -204,7 +204,7 @@ void train_loop_predictor(uint32_t pc, uint8_t outcome) {
     } else {
         // Allocate new entry on first loop iteration
         if (outcome == TAKEN) {
-            entry->tag = pc & 0xFFF;
+            entry->tag = (pc ^ (pc >> 16)) & 0xFFF;
             entry->valid = 1;
             entry->current_count = 1;
             entry->max_count = MAX_LOOP_COUNT;
@@ -239,11 +239,7 @@ void init_tourney()
     // tourney_choice_pred = (uint8_t *)malloc(choice_t_entries * sizeof(uint8_t));
     for (i = 0; i < choice_t_entries; i++)
     {
-        if (isCustom) {
-            tourney_choice_pred[i] = WT3;
-        } else {
-            tourney_choice_pred[i] = WT;
-        }
+        tourney_choice_pred[i] = WT;
     }
     tourney_global_hr = 0;
 
@@ -266,8 +262,10 @@ uint8_t tourney_predict_global(uint32_t pc)
 
 uint8_t tourney_predict_local(uint32_t pc)
 {
-    uint8_t loop_pred = loop_predict(pc);
-    if (loop_pred != 0xFF) return loop_pred;
+    if (isCustom) {
+        uint8_t loop_pred = loop_predict(pc);
+        if (loop_pred != 0xFF) return loop_pred;
+    }
 
     uint32_t local_bht_entries = 1 << tourney_lhistoryBits;
     uint32_t pht_index = pc & (local_bht_entries - 1);
@@ -284,17 +282,10 @@ uint8_t tourney_predict(uint32_t pc)
     uint32_t choice_entries = 1 << tourney_choiceBits;
     uint32_t index = tourney_global_hr & (choice_entries - 1);
 
-    if (isCustom) {
-        if (tourney_choice_pred[index] >= WT3)
-            return local_pred;
-        else
-            return global_pred;
-    } else {
-        if (tourney_choice_pred[index] >= WT)
-            return local_pred;
-        else
-            return global_pred;
-    }
+    if (tourney_choice_pred[index] >= WT)
+        return local_pred;
+    else
+        return global_pred;
 }
 
 void train_tourney(uint32_t pc, uint8_t outcome)
@@ -307,19 +298,11 @@ void train_tourney(uint32_t pc, uint8_t outcome)
 
     if ((local_pred == outcome) && (global_pred != outcome))
     {
-        if (isCustom) {
-            tourney_choice_pred[choice_index] = INC_3B_CNTR(tourney_choice_pred[choice_index]);
-        } else {
-            tourney_choice_pred[choice_index] = INC_CNTR(tourney_choice_pred[choice_index]);
-        }
+        tourney_choice_pred[choice_index] = INC_CNTR(tourney_choice_pred[choice_index]);
     }
     else if ((global_pred == outcome) && (local_pred != outcome))
     {
-        if (isCustom) {
-            tourney_choice_pred[choice_index] = DEC_3B_CNTR(tourney_choice_pred[choice_index]);
-        } else {
-            tourney_choice_pred[choice_index] = DEC_CNTR(tourney_choice_pred[choice_index]);
-        }
+        tourney_choice_pred[choice_index] = DEC_CNTR(tourney_choice_pred[choice_index]);
     }
 
     uint32_t global_bht_entries = 1 << tourney_ghistoryBits;
