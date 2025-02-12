@@ -126,7 +126,6 @@ void cleanup_gshare()
 // r = register
 bool isCustom = false;
 
-
 #define tourney_lhistoryBits 12 // Number of bits used for Local History
 #define tourney_ghistoryBits 16 // Number of bits used for Global History
 #define tourney_choiceBits 15   // Number of bits used for Choice Table
@@ -146,7 +145,7 @@ uint32_t branch_count = 0;
 //  tourament functions
 
 #define LTB_ENTRIES 128  // Loop Termination Buffer entries
-#define MAX_LOOP_COUNT 1024
+#define MAX_LOOP_COUNT ((1 << 16) - 1)
 #define CONF_THRESH 6    // Confidence threshold for stable prediction
 
 typedef struct {
@@ -157,23 +156,30 @@ typedef struct {
     uint8_t valid;          // Valid entry flag
 } LTB_Entry;
 
-LTB_Entry *ltb;
+LTB_Entry ltb[LTB_ENTRIES/2][2];
 
 // Initialize Loop Termination Buffer
 void init_loop_predictor() {
-    ltb = (LTB_Entry *)calloc(LTB_ENTRIES, sizeof(LTB_Entry));
+    return;
 }
 
 // Loop prediction logic
 uint8_t loop_predict(uint32_t pc) {
 
     uint32_t index = pc % LTB_ENTRIES;
-    LTB_Entry *entry = &ltb[index];
+    LTB_Entry *entry0 = &ltb[index][0];
+    LTB_Entry *entry1 = &ltb[index][1];
     
     // Tag match check
-    if (entry->valid && entry->tag == ((pc ^ (pc >> 16)) & 0xFFF)) {
-        if (entry->confidence >= CONF_THRESH) {
-            return (entry->current_count < entry->max_count) ? TAKEN : NOTTAKEN;
+    if (entry0->valid && entry0->tag == (((pc << 7) ^ (pc >> 9)) & 0xFFF)) {
+        if (entry0->confidence >= CONF_THRESH) {
+            return (entry0->current_count < entry0->max_count) ? TAKEN : NOTTAKEN;
+        }
+    }
+    // Tag match check
+    if (entry1->valid && entry1->tag == (((pc << 7) ^ (pc >> 9)) & 0xFFF)) {
+        if (entry1->confidence >= CONF_THRESH) {
+            return (entry1->current_count < entry1->max_count) ? TAKEN : NOTTAKEN;
         }
     }
     
@@ -185,35 +191,54 @@ uint8_t loop_predict(uint32_t pc) {
 void train_loop_predictor(uint32_t pc, uint8_t outcome) {
 
     uint32_t index = pc % LTB_ENTRIES;
-    LTB_Entry *entry = &ltb[index];
+    LTB_Entry *entry0 = &ltb[index][0];
+    LTB_Entry *entry1 = &ltb[index][1];
     
     // Detect new loops or update existing entries
-    if (entry->valid && entry->tag == ((pc ^ (pc >> 16)) & 0xFFF)) {
+    if (entry0->valid && entry0->tag == (((pc << 7) ^ (pc >> 9)) & 0xFFF)) {
         if (outcome == TAKEN) {
-            entry->current_count++;
+            entry0->current_count++;
         } else {
             // Loop exit - update confidence and max_count
-            if (entry->current_count == entry->max_count) {
-                entry->confidence = (entry->confidence < 7) ? entry->confidence + 1 : 7;
+            if (entry0->current_count == entry0->max_count) {
+                entry0->confidence = (entry0->confidence < 7) ? entry0->confidence + 1 : 7;
             } else {
-                entry->max_count = entry->current_count;
-                entry->confidence = 0;
+                entry0->max_count = entry0->current_count;
+                entry0->confidence = 0;
             }
-            entry->current_count = 0;
+            entry0->current_count = 0;
+        }
+    } else if (entry1->valid && entry1->tag == (((pc << 7) ^ (pc >> 9)) & 0xFFF)) {
+        if (outcome == TAKEN) {
+            entry1->current_count++;
+        } else {
+            // Loop exit - update confidence and max_count
+            if (entry1->current_count == entry1->max_count) {
+                entry1->confidence = (entry1->confidence < 7) ? entry1->confidence + 1 : 7;
+            } else {
+                entry1->max_count = entry1->current_count;
+                entry1->confidence = 0;
+            }
+            entry1->current_count = 0;
         }
     } else {
+        LTB_Entry *replace = NULL;
+        if (!entry0->valid || entry0->confidence < 3) replace = entry0;
+        else if (!entry1->valid || entry1->confidence < 3) replace = entry1;
+        else {
+            entry0->confidence = entry0->confidence << 1;
+            entry1->confidence = entry1->confidence << 1;
+        }
         // Allocate new entry on first loop iteration
-        if (outcome == TAKEN) {
-            entry->tag = (pc ^ (pc >> 16)) & 0xFFF;
-            entry->valid = 1;
-            entry->current_count = 1;
-            entry->max_count = MAX_LOOP_COUNT;
-            entry->confidence = 0;
+        if (replace != NULL && outcome == TAKEN) {
+            replace->tag = ((pc << 7) ^ (pc >> 9)) & 0xFFF;
+            replace->valid = 1;
+            replace->current_count = 1;
+            replace->max_count = MAX_LOOP_COUNT;
+            replace->confidence = 0;
         }
     }
-
 }
-
 
 
 void init_tourney()
@@ -365,7 +390,6 @@ void init_predictor()
 //
 uint32_t make_prediction(uint32_t pc, uint32_t target, uint32_t direct)
 {
-
     // Make a prediction based on the bpType
     switch (bpType)
     {
