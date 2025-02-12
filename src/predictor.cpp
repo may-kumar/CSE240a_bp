@@ -144,7 +144,7 @@ uint32_t branch_count = 0;
 // Tourney Predictor :
 //  tourament functions
 
-#define LTB_ENTRIES 128  // Loop Termination Buffer entries
+#define LTB_ENTRIES 64  // Loop Termination Buffer entries
 #define MAX_LOOP_COUNT ((1 << 16) - 1)
 #define CONF_THRESH 6    // Confidence threshold for stable prediction
 
@@ -156,7 +156,7 @@ typedef struct {
     uint8_t valid;          // Valid entry flag
 } LTB_Entry;
 
-LTB_Entry ltb[LTB_ENTRIES/2][2];
+LTB_Entry ltb[LTB_ENTRIES][2];
 
 // Initialize Loop Termination Buffer
 void init_loop_predictor() {
