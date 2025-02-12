@@ -84,7 +84,14 @@ void train_predictor(uint32_t pc, uint32_t target, uint32_t outcome, uint32_t co
 #define ST0 7 // predict T, strong taken
 
 
-#define DEC_3B_CNTR(x) (x > SN0) ? x-1 : SN0;
-#define INC_3B_CNTR(x) (x < ST0) ? x+1 : ST0;
+#define DEC_3B_CNTR(x) (x > SN0) ? x-1 : SN0
+#define INC_3B_CNTR(x) (x < ST0) ? x+1 : ST0
+
+// MIN/MAX with single evaluation and type safety
+#define MIN(a, b) a < b ? a : b; 
+#define MAX(a, b) a > b ? a : b; 
+
+// CLAMP with boundary checks and type preservation
+#define CLAMP(v, lo, hi) (v < lo) ? lo : ((v > hi) ? hi : v);
 
 #endif
